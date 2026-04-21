@@ -55,9 +55,17 @@ app.delete('/chat_messages', async (req, res) => {
 // =====================================================================
 app.post('/:table', async (req, res) => {
   const { table } = req.params;
+  console.log(`📩 REQUEST MASUK! Tabel: ${table}`);
+  console.log(`📦 Body:`, JSON.stringify(req.body, null, 2));
+
   try {
+    // Supabase SDK sering ngirim data dalam Array [ {} ]
     const data = Array.isArray(req.body) ? req.body[0] : req.body;
-    if (!data) return res.status(400).json({ error: "Data kosong" });
+    
+    if (!data || Object.keys(data).length === 0) {
+      console.log("⚠️ Data kosong!");
+      return res.status(400).json({ error: "Data tidak boleh kosong" });
+    }
 
     const keys = Object.keys(data);
     const values = Object.values(data);
@@ -65,12 +73,13 @@ app.post('/:table', async (req, res) => {
 
     const query = `INSERT INTO ${table} (${keys.join(', ')}) VALUES (${placeholders}) RETURNING *`;
     
-    console.log(`📝 INSERT ke ${table}`);
     const result = await pool.query(query, values);
-    res.status(201).json(result.rows); // Balikin array sesuai mau Supabase SDK
+    console.log("✅ Berhasil Insert:", result.rows[0]);
+    
+    // Kirim balik dalam Array karena Supabase SDK haus akan Array
+    res.status(201).json(result.rows);
   } catch (err) {
-    console.error(err.message);
-    if (err.code === '23505') return res.status(400).json({ error: "Username/Email sudah ada!" });
+    console.error("❌ ERROR INSERT:", err.message);
     res.status(500).json({ error: err.message });
   }
 });
