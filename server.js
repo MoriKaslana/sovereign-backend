@@ -51,7 +51,18 @@ app.get('/buffs', async (req, res) => {
   }
 });
 
-// 5. Endpoint Achievements
+// 5. Endpoint Debuffs (Yang baru ditambahin)
+app.get('/debuffs', async (req, res) => {
+  try {
+    const result = await pool.query('SELECT * FROM debuffs');
+    res.json(result.rows);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// 6. Endpoint Achievements
 app.get('/achievements', async (req, res) => {
   try {
     const result = await pool.query('SELECT * FROM achievements');
@@ -62,7 +73,7 @@ app.get('/achievements', async (req, res) => {
   }
 });
 
-// 6. Endpoint Chat Messages
+// 7. Endpoint Chat Messages
 app.get('/chat_messages', async (req, res) => {
   try {
     const result = await pool.query('SELECT * FROM chat_messages');
