@@ -18,67 +18,20 @@ app.get('/', (req, res) => {
   res.send('API Sovereign Guild Is Running! 🚀');
 });
 
-// 2. Endpoint Users
-app.get('/users', async (req, res) => {
-  try {
-    const result = await pool.query('SELECT * FROM users');
-    res.json(result.rows);
-  } catch (err) {
-    console.error(err);
-    res.status(500).json({ error: err.message });
-  }
+// 2. GET Endpoints (Users, Quests, Buffs, dll)
+const tables = ['users', 'quests', 'buffs', 'debuffs', 'invitations', 'achievements'];
+tables.forEach(table => {
+  app.get(`/${table}`, async (req, res) => {
+    try {
+      const result = await pool.query(`SELECT * FROM ${table}`);
+      res.json(result.rows);
+    } catch (err) {
+      res.status(500).json({ error: err.message });
+    }
+  });
 });
 
-// 3. Endpoint Quests
-app.get('/quests', async (req, res) => {
-  try {
-    const result = await pool.query('SELECT * FROM quests');
-    res.json(result.rows);
-  } catch (err) {
-    res.status(500).json({ error: err.message });
-  }
-});
-
-// 4. Endpoint Buffs & Debuffs
-app.get('/buffs', async (req, res) => {
-  try {
-    const result = await pool.query('SELECT * FROM buffs');
-    res.json(result.rows);
-  } catch (err) {
-    res.status(500).json({ error: err.message });
-  }
-});
-
-app.get('/debuffs', async (req, res) => {
-  try {
-    const result = await pool.query('SELECT * FROM debuffs');
-    res.json(result.rows);
-  } catch (err) {
-    res.status(500).json({ error: err.message });
-  }
-});
-
-// 5. Endpoint Invitations
-app.get('/invitations', async (req, res) => {
-  try {
-    const result = await pool.query('SELECT * FROM invitations');
-    res.json(result.rows);
-  } catch (err) {
-    res.status(500).json({ error: err.message });
-  }
-});
-
-// 6. Endpoint Achievements
-app.get('/achievements', async (req, res) => {
-  try {
-    const result = await pool.query('SELECT * FROM achievements');
-    res.json(result.rows);
-  } catch (err) {
-    res.status(500).json({ error: err.message });
-  }
-});
-
-// 7. Endpoint Chat Messages (GET & DELETE)
+// 3. Khusus Chat Messages (dengan Order)
 app.get('/chat_messages', async (req, res) => {
   try {
     const result = await pool.query('SELECT * FROM chat_messages ORDER BY created_at ASC');
@@ -98,60 +51,61 @@ app.delete('/chat_messages', async (req, res) => {
 });
 
 // =====================================================================
-// 8. DYNAMIC POST (Fungsi Asli untuk Insert Data, termasuk Register)
+// 4. DYNAMIC POST (Untuk INSERT / Daftar)
 // =====================================================================
 app.post('/:table', async (req, res) => {
   const { table } = req.params;
-  
-  // Keamanan: Hanya izinkan tabel-tabel ini
-  const allowedTables = ['users', 'quests', 'buffs', 'debuffs', 'achievements', 'chat_messages', 'invitations'];
-  if (!allowedTables.includes(table)) {
-    return res.status(403).json({ error: "Tabel tidak dikenali." });
-  }
-
   try {
-    // Frontend Supabase kadang ngirim data di dalam array, kadang object biasa
     const data = Array.isArray(req.body) ? req.body[0] : req.body;
-    
-    // Tarik nama kolom (keys) dan isi datanya (values)
+    if (!data) return res.status(400).json({ error: "Data kosong" });
+
     const keys = Object.keys(data);
     const values = Object.values(data);
-    
-    // Bikin format $1, $2, $3 buat query SQL
     const placeholders = keys.map((_, i) => `$${i + 1}`).join(', ');
+
+    const query = `INSERT INTO ${table} (${keys.join(', ')}) VALUES (${placeholders}) RETURNING *`;
     
-    const query = `
-      INSERT INTO ${table} (${keys.join(', ')}) 
-      VALUES (${placeholders}) 
-      RETURNING *
-    `;
-    
+    console.log(`📝 INSERT ke ${table}`);
     const result = await pool.query(query, values);
-    
-    // Supabase di frontend expect balikan datanya dibungkus array
-    res.status(201).json(result.rows);
-    
+    res.status(201).json(result.rows); // Balikin array sesuai mau Supabase SDK
   } catch (err) {
-    console.error(`❌ Error INSERT ke ${table}:`, err.message);
-    
-    // Kalau error kode 23505 (Constraint Violation / Duplikat Email atau Username)
-    if (err.code === '23505') {
-      return res.status(400).json({ error: "Username atau Email ini sudah dipakai. Cari yang lain, ksatria!" });
-    }
-    
+    console.error(err.message);
+    if (err.code === '23505') return res.status(400).json({ error: "Username/Email sudah ada!" });
     res.status(500).json({ error: err.message });
   }
 });
 
 // =====================================================================
-// 9. DYNAMIC PATCH (Placeholder buat Update Data nanti)
+// 5. DYNAMIC PATCH (Untuk UPDATE / Selesai Quest / Level Up)
 // =====================================================================
 app.patch('/:table', async (req, res) => {
-  console.log(`⚠️ Frontend mencoba UPDATE data di tabel ${req.params.table}`, req.body);
-  res.status(501).json({ message: "Fitur UPDATE belum dirakit di backend." });
+  const { table } = req.params;
+  try {
+    const data = Array.isArray(req.body) ? req.body[0] : req.body;
+    
+    // Supabase biasanya kirim ID di body atau kita butuh filter. 
+    // Untuk simplifikasi skripsi, kita asumsikan ID ada di dalam body data.
+    if (!data || !data.id) return res.status(400).json({ error: "ID wajib ada untuk Update" });
+
+    const { id, ...updateFields } = data;
+    const keys = Object.keys(updateFields);
+    const values = Object.values(updateFields);
+    
+    const setClause = keys.map((key, i) => `${key} = $${i + 1}`).join(', ');
+    values.push(id); // ID jadi parameter terakhir
+
+    const query = `UPDATE ${table} SET ${setClause} WHERE id = $${values.length} RETURNING *`;
+    
+    console.log(`🔄 UPDATE di ${table} ID: ${id}`);
+    const result = await pool.query(query, values);
+    res.json(result.rows);
+  } catch (err) {
+    console.error(err.message);
+    res.status(500).json({ error: err.message });
+  }
 });
 
-// Setting Port untuk Railway
+// Setting Port
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, '0.0.0.0', () => {
   console.log(`Server jalan di port ${PORT}`);
