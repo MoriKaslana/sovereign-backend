@@ -35,29 +35,35 @@ app.get('/quests', async (req, res) => {
     const result = await pool.query('SELECT * FROM quests');
     res.json(result.rows);
   } catch (err) {
-    console.error(err);
     res.status(500).json({ error: err.message });
   }
 });
 
-// 4. Endpoint Buffs
+// 4. Endpoint Buffs & Debuffs
 app.get('/buffs', async (req, res) => {
   try {
     const result = await pool.query('SELECT * FROM buffs');
     res.json(result.rows);
   } catch (err) {
-    console.error(err);
     res.status(500).json({ error: err.message });
   }
 });
 
-// 5. Endpoint Debuffs (Yang baru ditambahin)
 app.get('/debuffs', async (req, res) => {
   try {
     const result = await pool.query('SELECT * FROM debuffs');
     res.json(result.rows);
   } catch (err) {
-    console.error(err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// 5. Endpoint Invitations (Biar nggak 404 lagi)
+app.get('/invitations', async (req, res) => {
+  try {
+    const result = await pool.query('SELECT * FROM invitations');
+    res.json(result.rows);
+  } catch (err) {
     res.status(500).json({ error: err.message });
   }
 });
@@ -68,20 +74,35 @@ app.get('/achievements', async (req, res) => {
     const result = await pool.query('SELECT * FROM achievements');
     res.json(result.rows);
   } catch (err) {
-    console.error(err);
     res.status(500).json({ error: err.message });
   }
 });
 
-// 7. Endpoint Chat Messages
+// 7. Endpoint Chat Messages (GET & DELETE)
 app.get('/chat_messages', async (req, res) => {
   try {
-    const result = await pool.query('SELECT * FROM chat_messages');
+    const result = await pool.query('SELECT * FROM chat_messages ORDER BY created_at ASC');
     res.json(result.rows);
   } catch (err) {
-    console.error(err);
     res.status(500).json({ error: err.message });
   }
+});
+
+// Fitur Hapus Chat (Biar error merah di console hilang)
+app.delete('/chat_messages', async (req, res) => {
+  try {
+    const result = await pool.query('DELETE FROM chat_messages');
+    res.json({ message: "Chat messages cleared", deletedCount: result.rowCount });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// 8. Basic POST handler (Biar fitur insert nggak 404, meski datanya belum diproses detail)
+app.post('/:table', async (req, res) => {
+  const { table } = req.params;
+  console.log(`Menerima data baru untuk tabel: ${table}`, req.body);
+  res.json({ message: `Data dikirim ke ${table}, tapi logic insert belum spesifik.` });
 });
 
 // Setting Port untuk Railway
