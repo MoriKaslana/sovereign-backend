@@ -58,7 +58,7 @@ app.get('/debuffs', async (req, res) => {
   }
 });
 
-// 5. Endpoint Invitations (Biar nggak 404 lagi)
+// 5. Endpoint Invitations
 app.get('/invitations', async (req, res) => {
   try {
     const result = await pool.query('SELECT * FROM invitations');
@@ -88,7 +88,6 @@ app.get('/chat_messages', async (req, res) => {
   }
 });
 
-// Fitur Hapus Chat (Biar error merah di console hilang)
 app.delete('/chat_messages', async (req, res) => {
   try {
     const result = await pool.query('DELETE FROM chat_messages');
@@ -98,11 +97,58 @@ app.delete('/chat_messages', async (req, res) => {
   }
 });
 
-// 8. Basic POST handler (Biar fitur insert nggak 404, meski datanya belum diproses detail)
+// =====================================================================
+// 8. DYNAMIC POST (Fungsi Asli untuk Insert Data, termasuk Register)
+// =====================================================================
 app.post('/:table', async (req, res) => {
   const { table } = req.params;
-  console.log(`Menerima data baru untuk tabel: ${table}`, req.body);
-  res.json({ message: `Data dikirim ke ${table}, tapi logic insert belum spesifik.` });
+  
+  // Keamanan: Hanya izinkan tabel-tabel ini
+  const allowedTables = ['users', 'quests', 'buffs', 'debuffs', 'achievements', 'chat_messages', 'invitations'];
+  if (!allowedTables.includes(table)) {
+    return res.status(403).json({ error: "Tabel tidak dikenali." });
+  }
+
+  try {
+    // Frontend Supabase kadang ngirim data di dalam array, kadang object biasa
+    const data = Array.isArray(req.body) ? req.body[0] : req.body;
+    
+    // Tarik nama kolom (keys) dan isi datanya (values)
+    const keys = Object.keys(data);
+    const values = Object.values(data);
+    
+    // Bikin format $1, $2, $3 buat query SQL
+    const placeholders = keys.map((_, i) => `$${i + 1}`).join(', ');
+    
+    const query = `
+      INSERT INTO ${table} (${keys.join(', ')}) 
+      VALUES (${placeholders}) 
+      RETURNING *
+    `;
+    
+    const result = await pool.query(query, values);
+    
+    // Supabase di frontend expect balikan datanya dibungkus array
+    res.status(201).json(result.rows);
+    
+  } catch (err) {
+    console.error(`❌ Error INSERT ke ${table}:`, err.message);
+    
+    // Kalau error kode 23505 (Constraint Violation / Duplikat Email atau Username)
+    if (err.code === '23505') {
+      return res.status(400).json({ error: "Username atau Email ini sudah dipakai. Cari yang lain, ksatria!" });
+    }
+    
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// =====================================================================
+// 9. DYNAMIC PATCH (Placeholder buat Update Data nanti)
+// =====================================================================
+app.patch('/:table', async (req, res) => {
+  console.log(`⚠️ Frontend mencoba UPDATE data di tabel ${req.params.table}`, req.body);
+  res.status(501).json({ message: "Fitur UPDATE belum dirakit di backend." });
 });
 
 // Setting Port untuk Railway
