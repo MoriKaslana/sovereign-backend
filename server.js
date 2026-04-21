@@ -26,6 +26,7 @@ tables.forEach(table => {
       const result = await pool.query(`SELECT * FROM ${table}`);
       res.json(result.rows);
     } catch (err) {
+      console.error(`❌ GET Error (${table}):`, err.message);
       res.status(500).json({ error: err.message });
     }
   });
@@ -49,6 +50,7 @@ app.post('/:table', async (req, res) => {
   console.log(`📩 REQUEST POST: ${table}`);
 
   try {
+    // Handle data jika dibungkus dalam array oleh Supabase SDK
     const data = Array.isArray(req.body) ? req.body[0] : req.body;
     
     if (!data || Object.keys(data).length === 0) {
@@ -62,8 +64,8 @@ app.post('/:table', async (req, res) => {
     const query = `INSERT INTO ${table} (${keys.join(', ')}) VALUES (${placeholders}) RETURNING *`;
     
     const result = await pool.query(query, values);
-    console.log("✅ Berhasil Insert!");
-    res.status(201).json(result.rows);
+    console.log(`✅ Berhasil Insert ke ${table}`);
+    res.status(201).json(result.rows); // Selalu kirim result.rows (Array)
   } catch (err) {
     console.error("❌ ERROR INSERT:", err.message);
     res.status(500).json({ error: err.message });
@@ -71,7 +73,7 @@ app.post('/:table', async (req, res) => {
 });
 
 // =====================================================================
-// 5. DYNAMIC PATCH (DI-UPGRADE: Bisa baca filter Supabase)
+// 5. DYNAMIC PATCH (Fix 400 Bad Request)
 // =====================================================================
 app.patch('/:table', async (req, res) => {
   const { table } = req.params;
@@ -86,11 +88,13 @@ app.patch('/:table', async (req, res) => {
 
     if (!id) {
       console.log("⚠️ Update gagal: ID tidak ditemukan");
-      return res.status(400).json({ error: "ID wajib ada untuk Update (di URL atau Body)" });
+      return res.status(400).json({ error: "ID wajib ada untuk Update" });
     }
 
-    // Pisahkan ID dari data yang mau diupdate agar tidak terjadi 'id = id'
-    const { id: _, ...updateFields } = data;
+    // Pisahkan ID agar tidak ikut di-update (bisa bikin error di Postgres)
+    const updateFields = { ...data };
+    delete updateFields.id; 
+
     const keys = Object.keys(updateFields);
     const values = Object.values(updateFields);
     
@@ -109,7 +113,7 @@ app.patch('/:table', async (req, res) => {
       return res.status(404).json({ error: "Data tidak ditemukan" });
     }
 
-    console.log(`✅ ${table} Berhasil Diupdate!`);
+    console.log(`✅ ${table} Berhasil Diupdate (ID: ${id})`);
     res.json(result.rows);
   } catch (err) {
     console.error("❌ PATCH Error:", err.message);
@@ -123,11 +127,9 @@ app.patch('/:table', async (req, res) => {
 app.delete('/:table', async (req, res) => {
   const { table } = req.params;
   try {
-    // Ambil ID dari query string ?id=eq.xxx
     const id = req.query.id ? req.query.id.replace('eq.', '') : null;
 
     if (!id) {
-      // Jika tidak ada ID, tapi tabelnya chat_messages, kita izinkan hapus semua (fitur lama lu)
       if (table === 'chat_messages') {
         const result = await pool.query('DELETE FROM chat_messages');
         return res.json({ message: "All chats cleared", deletedCount: result.rowCount });
@@ -138,9 +140,10 @@ app.delete('/:table', async (req, res) => {
     const query = `DELETE FROM ${table} WHERE id = $1 RETURNING *`;
     const result = await pool.query(query, [id]);
     
-    console.log(`🗑️ Berhasil hapus dari ${table}`);
-    res.json({ message: "Deleted successfully", deletedCount: result.rowCount });
+    console.log(`🗑️ Berhasil hapus dari ${table} (ID: ${id})`);
+    res.json(result.rows);
   } catch (err) {
+    console.error("❌ DELETE Error:", err.message);
     res.status(500).json({ error: err.message });
   }
 });
