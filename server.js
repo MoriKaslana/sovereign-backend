@@ -82,16 +82,24 @@ app.patch('/:table', async (req, res) => {
   try {
     const data = Array.isArray(req.body) ? req.body[0] : req.body;
     
-    // DETEKSI ID: Ambil dari Query String (?id=eq.xxx) ATAU dari Body data
-    const idFromUrl = req.query.id ? req.query.id.replace('eq.', '') : null;
-    const id = idFromUrl || data.id;
+    // 🔍 RADAR ID LEBIH TELITI
+    // 1. Cek dari query params (misal: ?id=eq.123 atau ?id=123)
+    let id = req.query.id ? req.query.id.toString().replace('eq.', '') : null;
+    
+    // 2. Kalau di URL gak ada, cek di dalam Body data
+    if (!id) id = data.id;
 
-    if (!id) {
-      console.log("⚠️ Update gagal: ID tidak ditemukan");
-      return res.status(400).json({ error: "ID wajib ada untuk Update" });
+    // 3. Kalau masih gak ada, cek semua query params (siapa tahu namanya bukan 'id')
+    if (!id && Object.keys(req.query).length > 0) {
+      id = Object.values(req.query)[0].toString().replace('eq.', '');
     }
 
-    // Pisahkan ID agar tidak ikut di-update (bisa bikin error di Postgres)
+    if (!id) {
+      console.log("⚠️ Update gagal: ID beneran gak ada di URL maupun Body");
+      return res.status(400).json({ error: "ID wajib ada! Periksa .eq('id', questId) di FE lu." });
+    }
+
+    // Pisahkan ID agar tidak ikut masuk ke SET query
     const updateFields = { ...data };
     delete updateFields.id; 
 
@@ -99,28 +107,29 @@ app.patch('/:table', async (req, res) => {
     const values = Object.values(updateFields);
     
     if (keys.length === 0) {
-      return res.status(400).json({ error: "Tidak ada data yang di-update" });
+      return res.status(400).json({ error: "Data update kosong" });
     }
 
     const setClause = keys.map((key, i) => `${key} = $${i + 1}`).join(', ');
-    values.push(id); // ID ditaruh di urutan terakhir parameter
+    values.push(id); 
 
     const query = `UPDATE ${table} SET ${setClause} WHERE id = $${values.length} RETURNING *`;
     
+    console.log(`🚀 Menjalankan Update untuk ID: ${id}`);
     const result = await pool.query(query, values);
 
     if (result.rowCount === 0) {
+      console.log("❌ Data tidak ditemukan di DB");
       return res.status(404).json({ error: "Data tidak ditemukan" });
     }
 
-    console.log(`✅ ${table} Berhasil Diupdate (ID: ${id})`);
+    console.log(`✅ Success Update ${table}!`);
     res.json(result.rows);
   } catch (err) {
     console.error("❌ PATCH Error:", err.message);
     res.status(500).json({ error: err.message });
   }
 });
-
 // =====================================================================
 // 6. DYNAMIC DELETE (Untuk Hapus Chat atau Kick Member)
 // =====================================================================
